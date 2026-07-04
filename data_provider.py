@@ -116,7 +116,7 @@ class DataProvider:
             raw = yf.Ticker(code).news or []
             items = []
             for n in raw[:limit]:
-                content = n.get("content", n):
+                content = n.get("content", n)
                 title = content.get("title") or n.get("title")
                 if not title:
                     continue
