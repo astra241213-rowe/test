@@ -1,131 +1,240 @@
 """
-大师圆桌 · Decision Intelligence（v3）
+大师圆桌 · Decision Intelligence
 运行：streamlit run app.py
 """
 
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
+
+import pandas as pd
 import streamlit as st
-from data_provider import provider
-from masters import MASTERS, DISCLAIMER
-from analyzer import analyze_with_master, synthesize, run_debate, analyze_sentiment
-from risk_radar import compute_risk_radar
+
 import memory
+from analyzer import analyze_sentiment, analyze_with_master, run_debate, synthesize
+from data_provider import provider
+from masters import DISCLAIMER, MASTERS
+from portfolio import calculate_portfolio
+from risk_radar import compute_risk_radar
+
 
 st.set_page_config(page_title="大师圆桌 · 投资决策智能", page_icon="🎓", layout="wide")
 
-# ---------- 黑金主题 ----------
+# ---------- 深色青金主题：去掉红色 ----------
 st.markdown("""<style>
-.stApp { background: linear-gradient(180deg, #0B0E13 0%, #12151C 100%); }
-[data-testid="stSidebar"] { background: #0E1117; border-right: 1px solid #2A2416; }
-h1, h2, h3 { color: #E8C87A !important; letter-spacing: .5px; }
-h1 { font-weight: 700; border-bottom: 1px solid #3A3220; padding-bottom: .4em; }
-.stApp, .stMarkdown, p, label, span { color: #E6E1D6; }
-.stButton>button[kind="primary"] { background: linear-gradient(135deg,#B8912F,#E8C87A); color:#14100A; font-weight:700; border:none; border-radius:8px; }
-.stButton>button[kind="primary"]:hover { box-shadow: 0 0 16px rgba(232,200,122,.45); }
-[data-testid="stMetric"] { background:#151922; border:1px solid #2E2818; border-radius:10px; padding:10px 14px; }
-[data-testid="stMetricValue"] { color:#E8C87A; }
-.stProgress > div > div > div > div { background: linear-gradient(90deg,#B8912F,#E8C87A); }
-[data-testid="stExpander"] { background:#12151C; border:1px solid #2A2416; border-radius:10px; }
-.stTabs [data-baseweb="tab-list"] { border-bottom:1px solid #3A3220; }
-.stTabs [aria-selected="true"] { color:#E8C87A !important; border-bottom-color:#E8C87A !important; }
-div[data-testid="stAlert"] { border-radius:10px; }
-hr { border-color:#2A2416; }
+.stApp { background: linear-gradient(180deg, #081112 0%, #11171D 100%); }
+[data-testid="stSidebar"] { background:#0B1416; border-right:1px solid #1C3A3D; }
+h1, h2, h3 { color:#F2D38A !important; letter-spacing:0; }
+h1 { font-weight:700; border-bottom:1px solid #294348; padding-bottom:.35em; }
+.stApp, .stMarkdown, p, label, span { color:#E8ECE8; }
+.stCaption, [data-testid="stCaptionContainer"] { color:#9DB3B0 !important; }
+.stButton>button[kind="primary"] { background:linear-gradient(135deg,#1CB7A6,#F2D38A); color:#071112; font-weight:800; border:none; border-radius:8px; }
+.stButton>button[kind="primary"]:hover { box-shadow:0 0 16px rgba(28,183,166,.38); }
+[data-testid="stMetric"] { background:#111D22; border:1px solid #26464B; border-radius:8px; padding:10px 14px; }
+[data-testid="stMetricValue"] { color:#F2D38A; }
+.stProgress > div > div > div > div { background:linear-gradient(90deg,#1CB7A6,#F2D38A); }
+[data-testid="stExpander"] { background:#10191E; border:1px solid #26464B; border-radius:8px; }
+.stTabs [data-baseweb="tab-list"] { border-bottom:1px solid #294348; }
+.stTabs [aria-selected="true"] { color:#F2D38A !important; border-bottom-color:#1CB7A6 !important; }
+div[data-testid="stAlert"] { border-radius:8px; }
+hr { border-color:#294348; }
+.framework-card { border:1px solid #26464B; background:#10191E; border-radius:8px; padding:14px; min-height:170px; }
+.framework-step { color:#1CB7A6; font-weight:800; font-size:13px; }
+.timeline-item { border-left:3px solid #1CB7A6; padding:2px 0 12px 12px; margin-left:6px; }
+.timeline-date { color:#F2D38A; font-weight:700; }
+.soft-box { border:1px solid #26464B; background:#0F1A1D; border-radius:8px; padding:14px; }
 </style>""", unsafe_allow_html=True)
-st.title("🎓 大师圆桌 · Decision Intelligence")
-st.caption("同一只股票，不同的人，应该得到不同的建议 —— 我们分析的不是股票，是你的决策")
 
-page = st.sidebar.radio("导航", ["🔍 决策分析", "📔 决策档案与复盘"])
+st.title("大师圆桌 · 个人投资决策智能")
+st.caption("先算清你的持仓账本，再用五个小白问题看懂：股票是什么、公司好不好、贵不贵、时机对不对、适不适合现在的你。")
 
-# ================= 页面一：决策分析 =================
-if page == "🔍 决策分析":
+
+def money(value, currency=""):
+    try:
+        return f"{value:,.2f} {currency}".strip()
+    except Exception:
+        return "—"
+
+
+def pct(value):
+    try:
+        return f"{value:+.2f}%"
+    except Exception:
+        return "—"
+
+
+def build_timeline(stock, portfolio, news_list):
+    today = date.today()
+    events = [
+        {
+            "date": today - timedelta(days=29),
+            "title": "30日前价格",
+            "detail": f"价格约 {stock.history[0]} {stock.currency}，作为短期走势起点。",
+        },
+        {
+            "date": today - timedelta(days=14),
+            "title": "区间中点观察",
+            "detail": f"近30日中段价格约 {stock.history[len(stock.history)//2]} {stock.currency}。",
+        },
+        {
+            "date": today - timedelta(days=7),
+            "title": "用户成本线",
+            "detail": f"你的买入成本约 {portfolio['cost_price'] or 0:.2f} {stock.currency}，用来判断被套/盈利压力。",
+        },
+        {
+            "date": today,
+            "title": "当前价格",
+            "detail": f"当前价格 {stock.price} {stock.currency}，相对你的成本浮盈亏 {pct(portfolio['pnl_pct'])}。",
+        },
+    ]
+    for idx, item in enumerate(news_list[:2]):
+        events.insert(2 + idx, {
+            "date": today - timedelta(days=10 - idx * 3),
+            "title": item["source"],
+            "detail": item["title"],
+        })
+    return sorted(events, key=lambda x: x["date"])
+
+
+def render_framework_cards():
+    st.subheader("小白五问学习路径")
+    st.caption("大师不是用来表演人格，而是把新手看股票的顺序变清楚。")
+    cols = st.columns(4)
+    for col, key in zip(cols, ["lynch", "buffett", "graham", "livermore"]):
+        m = MASTERS[key]
+        with col:
+            st.markdown(
+                f"""
+                <div class="framework-card">
+                  <div class="framework-step">第 {m['emoji']} 问</div>
+                  <h4>{m['beginner_question']}</h4>
+                  <p>{m['simple_answer']}</p>
+                  <p><b>检查：</b>{' / '.join(m['checks'])}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    st.markdown(
+        """
+        <div class="soft-box">
+        <b>第 5 问：适不适合现在的我？</b><br>
+        这一问由裁判 Agent 回答：结合你的投入本金、成本价、可用现金、最多能亏多少钱和投资期限，判断现在该等、减仓、观察还是小额试错。
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+page = st.sidebar.radio("导航", ["决策分析", "决策档案与复盘"])
+
+if page == "决策分析":
     with st.sidebar:
-        st.header("① 你的情境（越真实，分析越准）")
-        position = st.radio("持仓状态", ["未持有，考虑买入", "已持有，考虑加仓",
-                                        "已持有，考虑卖出", "已持有，被套纠结中"])
-        cost = st.text_input("持仓成本（未持有可留空）")
-        weight = st.select_slider("该股占你总资金比例",
-                                  ["<10%", "10-30%", "30-50%", ">50%", "全仓"])
-        money_nature = st.radio("这笔钱的性质",
-                                ["纯闲钱，三年不用", "一年内可能要用", "含生活费或借贷资金"])
+        st.header("1. 你的真实持仓账本")
+        position = st.radio("现在状态", ["未持有，考虑买入", "已持有，考虑加仓", "已持有，考虑卖出", "已持有，被套纠结中"])
+        holding_amount = st.number_input("已经投入多少钱", min_value=0.0, value=10000.0, step=1000.0)
+        cost_price = st.number_input("你的买入成本价", min_value=0.0, value=250.0, step=1.0)
+        available_cash = st.number_input("现在还能用于投资的现金", min_value=0.0, value=10000.0, step=1000.0)
+        add_amount = st.number_input("如果补仓，打算再投入多少钱", min_value=0.0, value=0.0, step=1000.0)
+        max_loss_amount = st.number_input("这笔股票最多能接受亏多少钱", min_value=0.0, value=3000.0, step=500.0)
+        money_nature = st.radio("这笔钱的性质", ["纯闲钱，三年不用", "一年内可能要用", "含生活费或借贷资金"])
         experience = st.radio("投资经验", ["新手（<1年）", "1-3年", "3年以上"])
-        max_dd = st.select_slider("最大能承受的亏损",
-                                  ["-5%", "-10%", "-20%", "-30%", "腰斩也拿得住"])
         risk = st.radio("风险偏好", ["保守：亏10%就睡不着", "稳健：能接受20%回撤", "激进：波动是朋友"])
         horizon = st.radio("投资期限", ["短线（几天~几周）", "波段（几个月）", "长期（1年以上）"])
-        question = st.text_area("用你自己的话，详细描述现在的处境和纠结（强烈建议填写）",
-                                height=120,
-                                placeholder="例如：去年380买的，现在套了20%。这是我准备付首付的钱，"
-                                            "老婆不知道我买了这么多。最近看新闻说行业有利好，"
-                                            "想补仓摊成本，但又怕越补越套…")
+        question = st.text_area(
+            "现在最纠结什么",
+            height=110,
+            placeholder="例如：已经亏了不少，想补仓摊成本，但又怕越补越套。",
+        )
 
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([1, 1.5])
     with col1:
-        st.subheader("② 选择股票（港美股）")
+        st.subheader("2. 选择股票（港美股）")
         supported = provider.list_supported()
         mode = st.radio("选择方式", ["常用列表", "自定义代码"], horizontal=True)
         if mode == "常用列表":
-            code = st.selectbox("股票", options=list(supported.keys()),
-                                format_func=lambda c: f"{c} {supported[c]}")
+            code = st.selectbox("股票", options=list(supported.keys()), format_func=lambda c: f"{c} {supported[c]}")
         else:
             code = st.text_input("输入代码：美股如 AAPL，港股如 0700.HK", value="AAPL")
     with col2:
-        st.subheader("③ 组建你的分析团队")
-        st.caption("大师人物是框架的载体——真正运行的是四套决策框架 + 情绪证据 Agent")
-        selected = []
-        cols = st.columns(len(MASTERS))
-        for i, (key, m) in enumerate(MASTERS.items()):
-            with cols[i]:
-                if st.checkbox(f"{m['emoji']} {m['name']}", value=(i < 2), key=key):
-                    selected.append(key)
-                st.caption(m.get("framework_name", m["title"]))
-        c1, c2 = st.columns(2)
-        with c1:
-            use_news = st.checkbox("📰 引入新闻情绪 Agent（Evidence Layer）", value=True)
-        with c2:
-            use_debate = st.checkbox("⚔️ 开启大师交叉质询（辩论模式）", value=True)
+        render_framework_cards()
 
     st.divider()
 
-    if st.button("🚀 开始圆桌分析", type="primary", use_container_width=True):
-        if not selected:
-            st.warning("至少选择一套框架")
-            st.stop()
-        with st.spinner("拉取行情数据…"):
+    if st.button("开始分析我的决策", type="primary", use_container_width=True):
+        with st.spinner("整理股票证据和持仓账本…"):
             stock = provider.get_stock(code)
         if stock is None:
             st.error("未找到该股票。美股直接输字母代码（AAPL），港股输数字+.HK（0700.HK）")
             st.stop()
 
-        user_ctx = dict(position=position, cost=cost, weight=weight, risk=risk,
-                        horizon=horizon,
-                        question=f"资金性质：{money_nature}；投资经验：{experience}；"
-                                 f"最大承受亏损：{max_dd}。{question}")
+        portfolio = calculate_portfolio(
+            stock,
+            holding_amount=holding_amount,
+            cost_price=cost_price,
+            available_cash=available_cash,
+            max_loss_amount=max_loss_amount,
+            add_amount=add_amount,
+        )
 
-        # 决策记忆：目标漂移检测
+        user_ctx = dict(
+            position=position,
+            holding_amount=money(portfolio["holding_amount"], stock.currency),
+            cost_price=money(portfolio["cost_price"], stock.currency),
+            available_cash=money(portfolio["available_cash"], stock.currency),
+            max_loss_amount=money(portfolio["max_loss_amount"], stock.currency),
+            add_amount=money(portfolio["add_amount"], stock.currency),
+            pressure_level=portfolio["pressure_level"],
+            pnl_text=f"{money(portfolio['pnl'], stock.currency)}（{pct(portfolio['pnl_pct'])}）",
+            avg_cost_after_add_text=money(portfolio["avg_cost_after_add"], stock.currency),
+            stop_loss_price_text=money(portfolio["stop_loss_price"], stock.currency),
+            cost=money(portfolio["cost_price"], stock.currency),
+            weight=f"{portfolio['position_ratio']:.1f}%",
+            risk=risk,
+            horizon=horizon,
+            question=f"资金性质：{money_nature}；投资经验：{experience}；{question}",
+        )
+
         drift_note = memory.detect_drift(code, dict(user_ctx, question=question))
         if drift_note:
             st.warning(drift_note)
 
-        # 行情卡片（Evidence Layer：行情证据）
-        src_tag = "🟢 实时数据" if stock.source == "yfinance" else "🟡 离线演示数据"
-        st.subheader(f"📊 {stock.name}（{stock.code}）")
+        src_tag = "实时数据" if stock.source == "yfinance" else "离线演示数据"
+        st.subheader(f"{stock.name}（{stock.code}）")
         st.caption(f"{src_tag} ｜ 币种：{stock.currency} ｜ 行业：{stock.industry}")
+
         a, b, c, d = st.columns(4)
-        a.metric("现价", f"{stock.price} {stock.currency}", f"{stock.change_pct:+.2f}%")
+        a.metric("当前价格", f"{stock.price} {stock.currency}", pct(stock.change_pct))
         b.metric("PE / PB", f"{stock.pe or '—'} / {stock.pb or '—'}")
-        c.metric("市值", f"{stock.market_cap:,.0f} 亿" if stock.market_cap else "—")
-        d.metric("52周区间", f"{stock.low_52w}~{stock.high_52w}")
-        st.line_chart(stock.history, height=180)
+        c.metric("52周区间", f"{stock.low_52w} ~ {stock.high_52w}")
+        d.metric("市值", f"{stock.market_cap:,.0f} 亿" if stock.market_cap else "—")
 
-        # 新闻证据
-        news_list = []
-        if use_news:
-            news_list = provider.get_news(code)
-            with st.expander(f"📰 近期新闻证据（{len(news_list)} 条）", expanded=False):
-                for n in news_list:
-                    st.markdown(f"- {n['title']} ｜ *{n['source']}*")
+        st.subheader("系统计算结果：先把账算清楚")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("当前浮盈亏", money(portfolio["pnl"], stock.currency), pct(portfolio["pnl_pct"]))
+        c2.metric("补仓后成本", money(portfolio["avg_cost_after_add"], stock.currency))
+        c3.metric("参考止损价", money(portfolio["stop_loss_price"], stock.currency), f"-{portfolio['stop_loss_pct']}%")
+        c4.metric("资金压力", portfolio["pressure_level"], f"仓位约 {portfolio['position_ratio']:.1f}%")
+        st.info(portfolio["pressure_note"])
 
-        # 风险雷达（量化即时计算）
-        st.subheader("🎯 风险雷达 Risk Radar")
+        st.subheader("价格 + 事件 + 你的成本线")
+        chart_df = pd.DataFrame({
+            "价格": stock.history,
+            "你的成本线": [portfolio["cost_price"] if portfolio["cost_price"] else None] * len(stock.history),
+            "参考止损线": [portfolio["stop_loss_price"] if portfolio["stop_loss_price"] else None] * len(stock.history),
+        })
+        st.line_chart(chart_df, height=220)
+
+        news_list = provider.get_news(code)
+        with st.expander("证据时间线", expanded=True):
+            for event in build_timeline(stock, portfolio, news_list):
+                st.markdown(
+                    f"""<div class="timeline-item">
+                    <span class="timeline-date">{event['date'].strftime('%m-%d')}</span> · <b>{event['title']}</b><br>
+                    {event['detail']}
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+        st.subheader("量化风险雷达")
         radar = compute_risk_radar(stock, user_ctx)
         rcols = st.columns(len(radar))
         for rc, (dim, score, comment) in zip(rcols, radar):
@@ -134,78 +243,87 @@ if page == "🔍 决策分析":
                 st.progress(score / 100)
                 st.caption(comment)
 
-        # 各框架独立分析
-        st.subheader("🗣️ 框架视角（独立分析）")
-        from concurrent.futures import ThreadPoolExecutor
-        with st.spinner(f"{len(selected)} 位大师并行思考中…"):
+        st.subheader("四张框架卡：不是人格扮演，是小白分析顺序")
+        selected = ["lynch", "buffett", "graham", "livermore"]
+        with st.spinner("四套框架正在独立检查股票…"):
             with ThreadPoolExecutor(max_workers=4) as pool:
-                futures = {k: pool.submit(analyze_with_master, k, stock, user_ctx, drift_note)
-                           for k in selected}
+                futures = {k: pool.submit(analyze_with_master, k, stock, user_ctx, drift_note) for k in selected}
                 outputs = {k: f.result() for k, f in futures.items()}
-        tabs = st.tabs([f"{MASTERS[k]['emoji']} {MASTERS[k]['name']}" for k in selected])
+
+        tabs = st.tabs([f"第 {MASTERS[k]['emoji']} 问 · {MASTERS[k]['framework_name']}" for k in selected])
         for tab, key in zip(tabs, selected):
             with tab:
+                st.markdown(f"**{MASTERS[key]['beginner_question']}**")
+                st.caption(MASTERS[key]["simple_answer"])
                 st.markdown(outputs[key])
 
-        # 情绪 Agent
         extra_views = {}
-        if use_news and news_list:
-            st.subheader("📰 情绪分析师 Sentiment Agent")
-            with st.spinner("解读新闻情绪…"):
+        if news_list:
+            with st.spinner("提取新闻情绪证据…"):
                 senti = analyze_sentiment(stock, news_list, user_ctx)
-            st.markdown(senti)
-            extra_views["新闻情绪分析师（Sentiment Agent）"] = senti
+            extra_views["新闻情绪证据"] = senti
 
-        # 交叉质询
         debate_text = None
-        if use_debate and len(selected) >= 2:
-            st.subheader("⚔️ 交叉质询 · 精准打击彼此最脆弱的前提")
-            with st.spinner("大师们开始互相拆台…"):
-                debate_text = run_debate(outputs, stock)
-            st.markdown(debate_text)
+        with st.spinner("后台圆桌正在交叉质询，前台只展示蒸馏后的分歧雷达…"):
+            debate_text = run_debate(outputs, stock)
 
-        # 决策裁判
-        st.subheader("⚖️ 决策裁判 · 框架适配 + 行为偏差诊断")
-        with st.spinner("汇总共识与永久分歧、适配框架、诊断行为偏差…"):
-            synthesis = synthesize(outputs, stock, user_ctx, drift_note,
-                                   extra_views=extra_views, debate_text=debate_text)
+        st.subheader("分歧雷达 + 可验证检查点")
+        r1, r2, r3 = st.columns(3)
+        with r1:
+            st.markdown("**业务分歧**")
+            st.caption("这家公司增长是真需求，还是短期故事？")
+        with r2:
+            st.markdown("**估值分歧**")
+            st.caption("好公司是否已经太贵，安全边际够不够？")
+        with r3:
+            st.markdown("**时机分歧**")
+            st.caption("价格是否已经证明可以买，还是应该等确认？")
+        st.markdown(
+            """
+            - 如果毛利率和份额同步下滑，商业质量框架降权。
+            - 如果收入增速与产品/用户数据转弱，成长框架降权。
+            - 如果价格重新站回关键位，趋势框架的谨慎可以降权。
+            """
+        )
+
+        st.subheader("裁判结论：适不适合现在的你")
+        with st.spinner("裁判正在把框架分歧映射到你的持仓账本…"):
+            synthesis = synthesize(outputs, stock, user_ctx, drift_note, extra_views=extra_views, debate_text=debate_text)
         st.markdown(synthesis)
 
         memory.record_decision(code, stock.name, dict(user_ctx, question=question), synthesis)
-        st.success("📔 本次分析已存入你的决策档案（记得定期回来复盘）")
+        st.success("本次分析已存入决策档案。")
         st.info(DISCLAIMER)
     else:
         st.markdown(
             """
-            **使用流程**：左侧填写真实处境 → 选股票和分析团队 → 开始分析
-
-            **系统架构**：行情+新闻证据层 → 四套决策框架 + 情绪Agent → 交叉质询 →
-            决策裁判（框架适配 + 行为偏差诊断）→ 决策记忆与复盘
-            """
+            <div class="soft-box">
+            <b>使用流程：</b>填写真实持仓账本 → 选择股票 → 系统先算账 → 四张框架卡检查股票 → 后台圆桌质询 → 裁判给出适合你的结论。
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
         st.info(DISCLAIMER)
 
-# ================= 页面二：决策档案与复盘 =================
 else:
-    st.subheader("📔 你的决策档案（Decision Journal）")
-    st.caption("记录每一次决策处境与结论；复盘的价值在于看清自己的行为模式")
+    st.subheader("你的决策档案")
+    st.caption("记录每次分析的处境与结论；复盘价值在于看清自己的行为模式。")
     records = memory.get_all_records()
     if not records:
         st.info("还没有决策记录。去「决策分析」页做第一次分析吧。")
     else:
         for i, r in enumerate(records):
             with st.expander(f"{r['time']} ｜ {r['name']}（{r['code']}）｜ {r['position']}"):
-                st.markdown(f"**当时情境**：仓位 {r['weight']} ｜ {r['risk']} ｜ {r['horizon']}")
+                st.markdown(f"**当时情境**：仓位 {r.get('weight', '—')} ｜ {r['risk']} ｜ {r['horizon']}")
                 if r["question"]:
                     st.markdown(f"**当时的描述**：{r['question']}")
                 st.markdown(f"**裁判结论摘要**：\n\n{r['synthesis']}")
                 st.divider()
-                st.markdown("**🔄 复盘（一段时间后回来填）**")
                 opts = ["还没到复盘时间", "执行了", "没执行", "部分执行"]
                 followed = st.radio("最后你按建议做了吗？", opts, key=f"f{i}", horizontal=True,
                                     index=opts.index(r["followed"]) if r["followed"] in opts else 0)
-                reflection = st.text_area("现在回头看，你当时最大的判断错误或情绪偏差是什么？",
+                reflection = st.text_area("现在回头看，当时最大的判断错误或情绪偏差是什么？",
                                           value=r["reflection"], key=f"r{i}")
                 if st.button("保存复盘", key=f"b{i}"):
                     memory.update_reflection(i, followed, reflection)
-                    st.success("已保存。长期坚持复盘，你会看到自己的行为模式。")
+                    st.success("已保存。")

@@ -26,9 +26,17 @@ def compute_risk_radar(stock: StockInfo, user_ctx: dict) -> list:
     mom = (h[-1] - h[0]) / h[0] * 100 if h[0] else 0.0
     trend_score = min(100, max(5, 50 - mom * 2))  # 跌越多风险分越高
 
-    # 仓位风险：来自用户情境——这是"风险不只在股票，也在人"的落点
+    # 仓位风险：来自真实持仓账本。weight 可能是 "36.5%"，也可能是旧版分档。
+    weight_text = str(user_ctx.get("weight", ""))
     weight_map = {"<10%": 15, "10-30%": 35, "30-50%": 60, ">50%": 85, "全仓": 100}
-    pos_score = weight_map.get(user_ctx.get("weight", ""), 50)
+    if weight_text.endswith("%"):
+        try:
+            ratio = float(weight_text[:-1])
+            pos_score = min(100, max(5, ratio * 1.2))
+        except Exception:
+            pos_score = 50
+    else:
+        pos_score = weight_map.get(weight_text, 50)
 
     def level(s):
         return "偏高" if s >= 60 else ("中等" if s >= 35 else "偏低")
@@ -41,6 +49,6 @@ def compute_risk_radar(stock: StockInfo, user_ctx: dict) -> list:
         ("波动风险", round(vol_score),
          f"日均波动约 {daily_vol:.1f}%，波动风险{level(vol_score)}"),
         ("仓位风险", round(pos_score),
-         f"该股占你总资金 {user_ctx.get('weight','?')}——"
+         f"该股约占可见投资资金 {user_ctx.get('weight','?')}——"
          + ("集中度过高：个股的任何波动都会直接改写你的整体盈亏和心态" if pos_score >= 60 else "集中度尚可控")),
     ]

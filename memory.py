@@ -10,6 +10,7 @@
 import json
 import os
 from datetime import datetime
+from typing import Optional
 
 MEMORY_FILE = "decision_journal.json"
 
@@ -54,7 +55,7 @@ def get_history(code: str) -> list:
     return [r for r in _load() if r["code"] == code]
 
 
-def detect_drift(code: str, current_ctx: dict) -> str | None:
+def detect_drift(code: str, current_ctx: dict) -> Optional[str]:
     """
     检测目标漂移：对比上一次对同一只股票的分析。
     返回一段提示文字（给 UI 展示 + 注入 LLM 上下文），无漂移返回 None。

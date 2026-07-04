@@ -7,7 +7,9 @@
 """
 
 import random
+import os
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass
@@ -59,26 +61,32 @@ def _gen_history(base_price: float, days: int = 30) -> list:
 class DataProvider:
     """先真实数据，后模拟兜底"""
 
-    def get_stock(self, code: str) -> StockInfo | None:
+    def get_stock(self, code: str) -> Optional[StockInfo]:
         code = code.strip().upper()
-        real = self._try_yfinance(code)
-        if real:
-            return real
+        if self._real_data_enabled():
+            real = self._try_yfinance(code)
+            if real:
+                return real
         return self._mock_stock(code)
 
     def get_news(self, code: str, limit: int = 5) -> list:
         """返回 [{'title':..., 'source':..., 'time':...}]"""
         code = code.strip().upper()
-        real = self._try_yf_news(code, limit)
-        if real:
-            return real
+        if self._real_data_enabled():
+            real = self._try_yf_news(code, limit)
+            if real:
+                return real
         return self._mock_news(code, limit)
 
     def list_supported(self) -> dict:
         return {c: v[0] for c, v in _MOCK.items()}
 
+    def _real_data_enabled(self) -> bool:
+        """比赛演示默认走稳定离线数据；显式开启后才尝试 yfinance。"""
+        return os.getenv("ENABLE_REAL_DATA", "").lower() in {"1", "true", "yes"}
+
     # ---------- 真实数据（yfinance） ----------
-    def _try_yfinance(self, code: str) -> StockInfo | None:
+    def _try_yfinance(self, code: str) -> Optional[StockInfo]:
         try:
             import yfinance as yf
             t = yf.Ticker(code)
@@ -110,7 +118,7 @@ class DataProvider:
         except Exception:
             return None
 
-    def _try_yf_news(self, code: str, limit: int) -> list | None:
+    def _try_yf_news(self, code: str, limit: int) -> Optional[list]:
         try:
             import yfinance as yf
             raw = yf.Ticker(code).news or []
@@ -127,7 +135,7 @@ class DataProvider:
             return None
 
     # ---------- 模拟兜底 ----------
-    def _mock_stock(self, code: str) -> StockInfo | None:
+    def _mock_stock(self, code: str) -> Optional[StockInfo]:
         if code not in _MOCK:
             return None
         name, price, industry, pe, pb, cap, cur = _MOCK[code]
