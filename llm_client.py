@@ -1,23 +1,30 @@
 """
-LLM 调用层
-==========
-用 OpenAI 兼容协议（国内绝大多数算力 API 都兼容，明天官方给的大概率也是）。
-- 有 API key：真实调用
-- 没有 key：进入 DEMO 模式，返回预置文案，保证界面今晚就能跑通、
-  评审当天 API 万一挂了也有兜底演示方案（评审规则明确要求可替代演示方案）。
+LLM 调用层（OpenAI 兼容，火山方舟可直连）
+密钥读取顺序：环境变量 LLM_API_KEY → 本地文件 ark_key.txt（重启不丢）
+没有密钥时自动进入 DEMO 模式（离线兜底，保证评审可演示）
 """
 
 import os
 
-# ====== 明天拿到官方算力 API 后，只改这三行 ======
-API_BASE = os.getenv("LLM_API_BASE", "https://api.openai.com/v1")
-API_KEY = os.getenv("LLM_API_KEY", "")          # 留空 = DEMO 模式
-MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
-# ================================================
+API_BASE = os.getenv("LLM_API_BASE", "https://ark.cn-beijing.volces.com/api/v3")
+MODEL = os.getenv("LLM_MODEL", "doubao-seed-2-1-turbo-260628")
+
+
+def _load_key() -> str:
+    key = os.getenv("LLM_API_KEY", "")
+    if key:
+        return key
+    try:
+        with open("ark_key.txt") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+API_KEY = _load_key()
 
 
 def chat(system_prompt: str, user_prompt: str, temperature: float = 0.7) -> str:
-    """统一入口。失败或无 key 时自动降级到 DEMO 模式。"""
     if not API_KEY:
         return _demo_response(system_prompt)
     try:
@@ -37,29 +44,21 @@ def chat(system_prompt: str, user_prompt: str, temperature: float = 0.7) -> str:
 
 
 def _demo_response(system_prompt: str) -> str:
-    """离线兜底文案：按人格返回一段像样的示例分析，保证演示不空白。"""
+    if "辩论主持人" in system_prompt:
+        return ("**格雷厄姆**：巴菲特先生，你的判断依赖护城河还在变宽——这个前提有数据支撑吗？\n\n"
+                "**巴菲特**：量化上我让你一步，估值确实不便宜。但市场只给平庸公司便宜价——你的框架永远买不到伟大的公司。\n\n"
+                "**利弗莫尔**：你们说的都对。但讨论这些的时候，股价已经跌破关键位了。这位用户拿的还是重仓。\n\n"
+                "*(DEMO 模式示例输出)*")
+    if "情绪分析师" in system_prompt:
+        return ("**情绪温度计**：+4（偏乐观）。\n\n**最相关事件**：财报公布是你期限内最关键的变量。\n\n"
+                "**噪音过滤**：投行目标价调整属于日常噪音。\n\n*(DEMO 模式示例输出)*")
     if "巴菲特" in system_prompt:
-        return ("**生意本质**：这是一门能一句话说清的生意，这是好的开始。\n\n"
-                "**护城河**：品牌与渠道构成的护城河仍在，但需要观察它是在变宽还是被新对手侵蚀。\n\n"
-                "**价格与价值**：以当前估值看，安全边际并不算厚。记住：以合理价格买伟大的公司，"
-                "胜过以便宜价格买平庸的公司。\n\n**十年测试**：如果你不打算持有十年，就不要持有十分钟。\n\n"
-                "*(DEMO 模式示例输出，接入 API 后为实时生成)*")
+        return ("▌生意本质\n这是一门能一句话说清的生意。\n▌巴菲特的判断\n等更便宜——如果十年不能看它一眼，你还敢持有吗？\n*(DEMO 模式示例输出)*")
     if "格雷厄姆" in system_prompt:
-        return ("**定量筛查**：以当前 PE 与 PB 计算，PE×PB 超出防御型投资者的经典阈值。\n\n"
-                "**安全边际**：折让不足，本金保护有限。\n\n**市场先生**：他现在情绪偏乐观，"
-                "你不必陪他狂热。\n\n**结论**：这更接近投机而非投资，请诚实面对这一点。\n\n"
-                "*(DEMO 模式示例输出)*")
+        return ("▌投资还是投机？\n你的动机里有不甘心，这是投机信号。\n▌格雷厄姆的判断\n等更大折让。\n*(DEMO 模式示例输出)*")
     if "林奇" in system_prompt:
-        return ("**分类**：更接近稳定增长股而非快速增长股，预期收益要相应调整。\n\n"
-                "**PEG**：增速与估值的匹配度一般。\n\n**两分钟故事**：如果你没法向家人讲清楚"
-                "为什么买它，先别买。\n\n*(DEMO 模式示例输出)*")
+        return ("▌两分钟故事测试\n讲不清它为什么会赚更多钱，先别买。\n▌林奇的判断\n继续观察。\n*(DEMO 模式示例输出)*")
     if "利弗莫尔" in system_prompt:
-        return ("**趋势**：近 30 日价格结构显示最小阻力线方向不明，处于盘整区。\n\n"
-                "**止损**：先回答'亏到哪必须走'，再谈要不要进。没有止损计划的交易是赌博。\n\n"
-                "**情绪审视**：'不甘心'不是持仓理由。我用破产的教训告诉你：纪律高于判断。\n\n"
-                "*(DEMO 模式示例输出)*")
-    return ("**综合视角**：各位大师的分歧主要来自时间尺度——价值派看三到五年，交易派看三到五周。\n\n"
-            "**情境适配**：以你的仓位占比和风险偏好，格雷厄姆的防御框架更适合当前处境。\n\n"
-            "**可执行清单**：1) 先设定明确止损/止盈位；2) 单一持仓不超过总仓位的 20%；"
-            "3) 写下买入理由，理由消失即卖出。\n\n**最大盲区**：你在用'长期投资'安慰短期被套的自己。\n\n"
-            "*(DEMO 模式示例输出，接入 API 后为实时生成)*")
+        return ("等。\n▌止损纪律\n建议止损位：现价下方8%。\n▌利弗莫尔的判断\n等待。\n*(DEMO 模式示例输出)*")
+    return ("【裁判 · 情境化决策】\n▌永久分歧区\n价值派看三五年，交易派看三五周——不调和。\n"
+            "▌行为偏差诊断\n损失厌恶：你在用长期投资安慰被套的自己。\n▌最大盲区提示\n最大风险不是股票，是你的仓位结构。\n*(DEMO 模式示例输出)*")
