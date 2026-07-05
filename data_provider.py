@@ -25,6 +25,11 @@ class StockInfo:
     high_52w: float
     low_52w: float
     currency: str          # USD / HKD
+    revenue_growth: Optional[float] = None
+    roe: Optional[float] = None
+    gross_margin: Optional[float] = None
+    profit_margin: Optional[float] = None
+    operating_cashflow: Optional[float] = None
     history: list = field(default_factory=list)
     source: str = "mock"   # mock / yfinance
 
@@ -60,6 +65,24 @@ def _gen_history(base_price: float, days: int = 30) -> list:
 
 class DataProvider:
     """先真实数据，后模拟兜底"""
+
+    @staticmethod
+    def _ratio_to_pct(value) -> Optional[float]:
+        try:
+            if value is None:
+                return None
+            return round(float(value) * 100, 1)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _money_to_yi(value) -> Optional[float]:
+        try:
+            if value is None:
+                return None
+            return round(float(value) / 1e8, 1)
+        except Exception:
+            return None
 
     def get_stock(self, code: str) -> Optional[StockInfo]:
         code = code.strip().upper()
@@ -124,6 +147,11 @@ class DataProvider:
                 high_52w=round(info.get("fiftyTwoWeekHigh") or max(closes), 2),
                 low_52w=round(info.get("fiftyTwoWeekLow") or min(closes), 2),
                 currency=currency, history=closes, source="yfinance",
+                revenue_growth=self._ratio_to_pct(info.get("revenueGrowth")),
+                roe=self._ratio_to_pct(info.get("returnOnEquity")),
+                gross_margin=self._ratio_to_pct(info.get("grossMargins")),
+                profit_margin=self._ratio_to_pct(info.get("profitMargins")),
+                operating_cashflow=self._money_to_yi(info.get("operatingCashflow")),
             )
         except Exception:
             return None
@@ -156,6 +184,8 @@ class DataProvider:
             pe=pe, pb=pb, market_cap=cap, industry=industry,
             high_52w=round(price * 1.35, 2), low_52w=round(price * 0.72, 2),
             currency=cur, history=_gen_history(price), source="mock",
+            revenue_growth=None, roe=None, gross_margin=None,
+            profit_margin=None, operating_cashflow=None,
         )
 
     def _mock_news(self, code: str, limit: int) -> list:

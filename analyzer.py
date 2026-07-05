@@ -17,6 +17,11 @@ def _build_stock_context(stock: StockInfo) -> str:
     """只把股票证据拼给大师，避免在独立分析阶段提前按用户处境加权"""
     hist_str = " → ".join(str(p) for p in stock.history[-10:])
     src_label = "实时数据(yfinance)" if stock.source == "yfinance" else "离线演示数据(模拟)"
+    revenue_growth = f"{stock.revenue_growth}%" if stock.revenue_growth is not None else "暂缺"
+    roe = f"{stock.roe}%" if stock.roe is not None else "暂缺"
+    gross_margin = f"{stock.gross_margin}%" if stock.gross_margin is not None else "暂缺"
+    profit_margin = f"{stock.profit_margin}%" if stock.profit_margin is not None else "暂缺"
+    operating_cashflow = f"{stock.operating_cashflow} 亿" if stock.operating_cashflow is not None else "暂缺"
     return f"""【数据来源规则】以下股票数据来源：{src_label}。你只能引用下方提供的数字；如果你想使用任何训练记忆中的数字（历史财报、增速等），必须显式标注"⚠️ 此数字来自模型记忆，可能过时，请核实"。
 
 【股票数据】
@@ -24,7 +29,17 @@ def _build_stock_context(stock: StockInfo) -> str:
 现价 {stock.price} 元（今日 {stock.change_pct:+.2f}%）
 PE {stock.pe} | PB {stock.pb} | 市值 {stock.market_cap} 亿
 52周区间：{stock.low_52w} ~ {stock.high_52w}
-近10日收盘：{hist_str}"""
+近10日收盘：{hist_str}
+
+【自动拉取到的财务信号】
+收入增速：{revenue_growth}
+ROE：{roe}
+毛利率：{gross_margin}
+净利率：{profit_margin}
+经营现金流：{operating_cashflow}
+
+【当前仍可能缺失的关键事实】
+市场份额、细分业务拆分、产品/用户活跃度、管理层口径、年报原文摘要，这些如果没给出就不能假装已验证。"""
 
 
 def _build_judge_context(stock: StockInfo, user_ctx: dict, drift_note: Optional[str] = None) -> str:
@@ -37,11 +52,8 @@ def _build_judge_context(stock: StockInfo, user_ctx: dict, drift_note: Optional[
 投入本金：{user_ctx.get('holding_amount', '未填写')}
 买入成本价：{user_ctx.get('cost_price', '未填写')}
 可用现金：{user_ctx.get('available_cash', '未填写')}
-最多愿意亏损：{user_ctx.get('max_loss_amount', '未填写')}
-计划补仓金额：{user_ctx.get('add_amount', '未填写')}
 系统估算仓位压力：{user_ctx.get('pressure_level', '未知')}
 当前浮盈亏：{user_ctx.get('pnl_text', '未知')}
-补仓后成本：{user_ctx.get('avg_cost_after_add_text', '未知')}
 参考止损价：{user_ctx.get('stop_loss_price_text', '未知')}
 风险偏好：{user_ctx['risk']}
 投资期限：{user_ctx['horizon']}
