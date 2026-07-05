@@ -7,7 +7,7 @@ LLM 调用层（OpenAI 兼容，火山方舟可直连）
 import os
 
 DEFAULT_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
-DEFAULT_MODEL = "doubao-seed-2-1-turbo"
+DEFAULT_MODEL = "doubao-seed-2-1-turbo-260628"
 
 
 def _secret(name: str, default: str = "") -> str:
@@ -66,8 +66,8 @@ def chat(system_prompt: str, user_prompt: str, temperature: float = 0.7) -> str:
             ],
         )
         return resp.choices[0].message.content
-    except Exception as e:
-        return f"（API 调用失败，已降级为离线模式：{e}）\n\n" + _demo_response(system_prompt)
+    except Exception:
+        return "（模型暂未连接，当前使用演示输出。）\n\n" + _demo_response(system_prompt)
 
 
 def _demo_response(system_prompt: str) -> str:

@@ -46,7 +46,7 @@ pip install -r requirements.txt
 # 可选：配置真实 LLM API（不配则进入离线演示模式）
 export LLM_API_BASE="https://ark.cn-beijing.volces.com/api/v3"
 export LLM_API_KEY="sk-xxx"
-export LLM_MODEL="doubao-seed-2-1-turbo"
+export LLM_MODEL="doubao-seed-2-1-turbo-260628"
 streamlit run app.py
 ```
 
@@ -60,11 +60,11 @@ streamlit run app.py
 ```toml
 LLM_API_KEY = "你的火山方舟 API Key"
 LLM_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
-LLM_MODEL = "doubao-seed-2-1-turbo"
+LLM_MODEL = "doubao-seed-2-1-turbo-260628"
 ENABLE_REAL_DATA = "1"
 ```
 
-如果实时行情不稳定，可以把 `ENABLE_REAL_DATA` 改成 `"0"`，系统会固定使用演示数据。
+如果实时行情不稳定，可以把 `ENABLE_REAL_DATA` 改成 `"0"`，系统会固定使用演示数据。`LLM_MODEL` 要填火山方舟 API 接入页可调用的模型 ID/Endpoint ID，不一定等于模型市场展示名。
 
 ## 第三方资源声明
 - [Streamlit](https://streamlit.io/)（Apache-2.0）、[openai-python](https://github.com/openai/openai-python)（Apache-2.0）

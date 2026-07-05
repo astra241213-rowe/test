@@ -20,30 +20,36 @@ from risk_radar import compute_risk_radar
 
 st.set_page_config(page_title="大师圆桌 · 投资决策智能", page_icon="🎓", layout="wide")
 
-# ---------- 深色青金主题：去掉红色 ----------
+# ---------- 纯黑主题：去掉红色和多余工具栏 ----------
 st.markdown("""<style>
-.stApp { background: linear-gradient(180deg, #081112 0%, #11171D 100%); }
-[data-testid="stSidebar"] { background:#0B1416; border-right:1px solid #1C3A3D; }
-h1, h2, h3 { color:#F2D38A !important; letter-spacing:0; }
-h1 { font-weight:700; border-bottom:1px solid #294348; padding-bottom:.35em; }
-.stApp, .stMarkdown, p, label, span { color:#E8ECE8; }
-.stCaption, [data-testid="stCaptionContainer"] { color:#9DB3B0 !important; }
-.stButton>button[kind="primary"] { background:linear-gradient(135deg,#1CB7A6,#F2D38A); color:#071112; font-weight:800; border:none; border-radius:8px; }
-.stButton>button[kind="primary"]:hover { box-shadow:0 0 16px rgba(28,183,166,.38); }
-[data-testid="stMetric"] { background:#111D22; border:1px solid #26464B; border-radius:8px; padding:10px 14px; }
-[data-testid="stMetricValue"] { color:#F2D38A; }
-.stProgress > div > div > div > div { background:linear-gradient(90deg,#1CB7A6,#F2D38A); }
-[data-testid="stExpander"] { background:#10191E; border:1px solid #26464B; border-radius:8px; }
-.stTabs [data-baseweb="tab-list"] { border-bottom:1px solid #294348; }
-.stTabs [aria-selected="true"] { color:#F2D38A !important; border-bottom-color:#1CB7A6 !important; }
+.stApp { background:#050505; }
+[data-testid="stSidebar"] { background:#080808; border-right:1px solid #222; }
+[data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer, header { visibility:hidden; height:0; }
+h1, h2, h3 { color:#F4D27A !important; letter-spacing:0; }
+h1 { font-weight:700; border-bottom:1px solid #222; padding-bottom:.35em; }
+.stApp, .stMarkdown, p, label, span { color:#F2F2F2; }
+.stCaption, [data-testid="stCaptionContainer"] { color:#9B9B9B !important; }
+.stButton>button[kind="primary"] { background:#F4D27A; color:#050505; font-weight:800; border:none; border-radius:8px; }
+.stButton>button[kind="primary"]:hover { background:#FFE39A; color:#050505; border:none; }
+[data-testid="stMetric"] { background:#0D0D0D; border:1px solid #242424; border-radius:8px; padding:10px 14px; }
+[data-testid="stMetricValue"] { color:#F4D27A; }
+.stProgress > div > div > div > div { background:#F4D27A; }
+[data-testid="stExpander"] { background:#0D0D0D; border:1px solid #242424; border-radius:8px; }
+.stTabs [data-baseweb="tab-list"] { border-bottom:1px solid #222; }
+.stTabs [aria-selected="true"] { color:#F4D27A !important; border-bottom-color:#F4D27A !important; }
 div[data-testid="stAlert"] { border-radius:8px; }
-hr { border-color:#294348; }
+hr { border-color:#222; }
+.stRadio [role="radiogroup"] label > div:first-child,
+.stCheckbox label > div:first-child { border-color:#555 !important; background:#1A1A1A !important; }
+.stRadio [role="radiogroup"] label[data-checked="true"] > div:first-child,
+.stCheckbox label[data-checked="true"] > div:first-child { border-color:#F4D27A !important; background:#F4D27A !important; }
+input[type="radio"], input[type="checkbox"] { accent-color:#F4D27A !important; }
 .step-strip { display:flex; gap:8px; flex-wrap:wrap; margin:.5rem 0 1rem 0; }
-.step-chip { border:1px solid #26464B; background:#10191E; border-radius:999px; padding:8px 12px; color:#E8ECE8; font-size:14px; }
-.step-chip b { color:#1CB7A6; }
-.timeline-item { border-left:3px solid #1CB7A6; padding:2px 0 12px 12px; margin-left:6px; }
-.timeline-date { color:#F2D38A; font-weight:700; }
-.soft-box { border:1px solid #26464B; background:#0F1A1D; border-radius:8px; padding:14px; }
+.step-chip { border:1px solid #333; background:#0D0D0D; border-radius:999px; padding:8px 12px; color:#F2F2F2; font-size:14px; }
+.step-chip b { color:#F4D27A; }
+.timeline-item { border-left:3px solid #F4D27A; padding:2px 0 12px 12px; margin-left:6px; }
+.timeline-date { color:#F4D27A; font-weight:700; }
+.soft-box { border:1px solid #333; background:#0D0D0D; border-radius:8px; padding:14px; }
 </style>""", unsafe_allow_html=True)
 
 st.title("大师圆桌 · 个人投资决策智能")
@@ -113,35 +119,45 @@ def render_framework_cards():
     )
 
 
-page = st.sidebar.radio("导航", ["决策分析", "决策档案与复盘"])
+page = st.sidebar.selectbox("导航", ["决策分析", "决策档案与复盘"])
 model_status = llm_client.status()
 st.sidebar.caption(f"模型：{model_status['label']} · {model_status['model']}")
 st.sidebar.caption(f"数据：{provider.status_label()}，失败自动切换演示数据")
 
 if page == "决策分析":
-    with st.sidebar:
-        st.header("1. 你的真实持仓账本")
-        position = st.radio("现在状态", ["未持有，考虑买入", "已持有，考虑加仓", "已持有，考虑卖出", "已持有，被套纠结中"])
-        holding_amount = st.number_input("已经投入多少钱", min_value=0.0, value=10000.0, step=1000.0)
-        cost_price = st.number_input("你的买入成本价", min_value=0.0, value=250.0, step=1.0)
-        available_cash = st.number_input("现在还能用于投资的现金", min_value=0.0, value=10000.0, step=1000.0)
-        add_amount = st.number_input("如果补仓，打算再投入多少钱", min_value=0.0, value=0.0, step=1000.0)
-        max_loss_amount = st.number_input("这笔股票最多能接受亏多少钱", min_value=0.0, value=3000.0, step=500.0)
-        money_nature = st.radio("这笔钱的性质", ["纯闲钱，三年不用", "一年内可能要用", "含生活费或借贷资金"])
-        experience = st.radio("投资经验", ["新手（<1年）", "1-3年", "3年以上"])
-        risk = st.radio("风险偏好", ["保守：亏10%就睡不着", "稳健：能接受20%回撤", "激进：波动是朋友"])
-        horizon = st.radio("投资期限", ["短线（几天~几周）", "波段（几个月）", "长期（1年以上）"])
-        question = st.text_area(
-            "现在最纠结什么",
-            height=110,
-            placeholder="例如：已经亏了不少，想补仓摊成本，但又怕越补越套。",
-        )
+    st.subheader("1. 先填写你的持仓账本")
+    st.caption("这一步是核心：系统会先算清你的成本、浮盈亏、补仓后成本和资金压力。")
+    with st.container():
+        a1, a2, a3, a4 = st.columns(4)
+        with a1:
+            position = st.selectbox("现在状态", ["未持有，考虑买入", "已持有，考虑加仓", "已持有，考虑卖出", "已持有，被套纠结中"])
+            holding_amount = st.number_input("已经投入多少钱", min_value=0.0, value=10000.0, step=1000.0)
+        with a2:
+            cost_price = st.number_input("你的买入成本价", min_value=0.0, value=250.0, step=1.0)
+            available_cash = st.number_input("还能用于投资的现金", min_value=0.0, value=10000.0, step=1000.0)
+        with a3:
+            add_amount = st.number_input("如果补仓，打算再投多少", min_value=0.0, value=0.0, step=1000.0)
+            max_loss_amount = st.number_input("最多能接受亏多少钱", min_value=0.0, value=3000.0, step=500.0)
+        with a4:
+            money_nature = st.selectbox("这笔钱的性质", ["纯闲钱，三年不用", "一年内可能要用", "含生活费或借贷资金"])
+            experience = st.selectbox("投资经验", ["新手（<1年）", "1-3年", "3年以上"])
+        b1, b2, b3 = st.columns([1, 1, 2])
+        with b1:
+            risk = st.selectbox("风险偏好", ["保守：亏10%就睡不着", "稳健：能接受20%回撤", "激进：波动是朋友"])
+        with b2:
+            horizon = st.selectbox("投资期限", ["短线（几天~几周）", "波段（几个月）", "长期（1年以上）"])
+        with b3:
+            question = st.text_area(
+                "现在最纠结什么",
+                height=80,
+                placeholder="例如：已经亏了不少，想补仓摊成本，但又怕越补越套。",
+            )
 
-    col1, col2 = st.columns([1, 1.5])
+    st.subheader("2. 选择股票")
+    col1, col2 = st.columns([1, 1.3])
     with col1:
-        st.subheader("2. 选择股票（港美股）")
         supported = provider.list_supported()
-        mode = st.radio("选择方式", ["常用列表", "自定义代码"], horizontal=True)
+        mode = st.selectbox("选择方式", ["常用列表", "自定义代码"])
         if mode == "常用列表":
             code = st.selectbox("股票", options=list(supported.keys()), format_func=lambda c: f"{c} {supported[c]}")
         else:
@@ -235,16 +251,15 @@ if page == "决策分析":
                 st.progress(score / 100)
                 st.caption(comment)
 
-        st.subheader("四张框架卡：不是人格扮演，是小白分析顺序")
+        st.subheader("四张框架卡")
         selected = ["lynch", "buffett", "graham", "livermore"]
         with st.spinner("四套框架正在独立检查股票…"):
             with ThreadPoolExecutor(max_workers=4) as pool:
                 futures = {k: pool.submit(analyze_with_master, k, stock, user_ctx, drift_note) for k in selected}
                 outputs = {k: f.result() for k, f in futures.items()}
 
-        tabs = st.tabs([f"第 {MASTERS[k]['emoji']} 问 · {MASTERS[k]['framework_name']}" for k in selected])
-        for tab, key in zip(tabs, selected):
-            with tab:
+        for key in selected:
+            with st.expander(f"第 {MASTERS[key]['emoji']} 问 · {MASTERS[key]['framework_name']}", expanded=(key == "lynch")):
                 st.markdown(f"**{MASTERS[key]['beginner_question']}**")
                 st.caption(MASTERS[key]["simple_answer"])
                 st.markdown(outputs[key])
@@ -255,7 +270,6 @@ if page == "决策分析":
                 senti = analyze_sentiment(stock, news_list, user_ctx)
             extra_views["新闻情绪证据"] = senti
 
-        debate_text = None
         with st.spinner("后台圆桌正在交叉质询，前台只展示蒸馏后的分歧雷达…"):
             debate_text = run_debate(outputs, stock)
 
@@ -287,9 +301,8 @@ if page == "决策分析":
         st.success("本次分析已存入决策档案。")
         st.info(DISCLAIMER)
     else:
-        st.caption("填写左侧持仓账本，选择股票后开始分析。")
+        st.caption("填写持仓账本，选择股票后开始分析。")
         st.info(DISCLAIMER)
-
 else:
     st.subheader("你的决策档案")
     st.caption("记录每次分析的处境与结论；复盘价值在于看清自己的行为模式。")
@@ -305,8 +318,8 @@ else:
                 st.markdown(f"**裁判结论摘要**：\n\n{r['synthesis']}")
                 st.divider()
                 opts = ["还没到复盘时间", "执行了", "没执行", "部分执行"]
-                followed = st.radio("最后你按建议做了吗？", opts, key=f"f{i}", horizontal=True,
-                                    index=opts.index(r["followed"]) if r["followed"] in opts else 0)
+                followed = st.selectbox("最后你按建议做了吗？", opts, key=f"f{i}",
+                                        index=opts.index(r["followed"]) if r["followed"] in opts else 0)
                 reflection = st.text_area("现在回头看，当时最大的判断错误或情绪偏差是什么？",
                                           value=r["reflection"], key=f"r{i}")
                 if st.button("保存复盘", key=f"b{i}"):
