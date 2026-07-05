@@ -53,7 +53,7 @@ input[type="radio"], input[type="checkbox"] { accent-color:#F4D27A !important; }
 </style>""", unsafe_allow_html=True)
 
 st.title("大师圆桌 · 个人投资决策智能")
-st.caption("先算账，再判断：股票是什么 → 公司好不好 → 价格贵不贵 → 时机对不对 → 适不适合现在的你。")
+st.caption("先算账，再让四位大师用不同框架审一遍：林奇看业务，巴菲特看生意，格雷厄姆看估值，利弗莫尔看时机。")
 
 
 def money(value, currency=""):
@@ -104,15 +104,14 @@ def build_timeline(stock, portfolio, news_list):
 
 
 def render_framework_cards():
-    st.subheader("小白四步")
+    st.subheader("四位大师怎么帮你看")
     st.markdown(
         """
         <div class="step-strip">
-          <span class="step-chip"><b>1</b> 股票是什么</span>
-          <span class="step-chip"><b>2</b> 公司好不好</span>
-          <span class="step-chip"><b>3</b> 价格贵不贵</span>
-          <span class="step-chip"><b>4</b> 时机对不对</span>
-          <span class="step-chip"><b>5</b> 适不适合我</span>
+          <span class="step-chip"><b>彼得·林奇</b> 股票是什么</span>
+          <span class="step-chip"><b>沃伦·巴菲特</b> 公司好不好</span>
+          <span class="step-chip"><b>格雷厄姆</b> 价格贵不贵</span>
+          <span class="step-chip"><b>利弗莫尔</b> 时机对不对</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -251,7 +250,7 @@ if page == "决策分析":
                 st.progress(score / 100)
                 st.caption(comment)
 
-        st.subheader("四张框架卡")
+        st.subheader("四位大师独立判断")
         selected = ["lynch", "buffett", "graham", "livermore"]
         with st.spinner("四套框架正在独立检查股票…"):
             with ThreadPoolExecutor(max_workers=4) as pool:
@@ -259,9 +258,10 @@ if page == "决策分析":
                 outputs = {k: f.result() for k, f in futures.items()}
 
         for key in selected:
-            with st.expander(f"第 {MASTERS[key]['emoji']} 问 · {MASTERS[key]['framework_name']}", expanded=(key == "lynch")):
-                st.markdown(f"**{MASTERS[key]['beginner_question']}**")
-                st.caption(MASTERS[key]["simple_answer"])
+            title = f"{MASTERS[key]['name']}视角｜第{MASTERS[key]['emoji']}问：{MASTERS[key]['framework_name']}"
+            with st.expander(title, expanded=(key == "lynch")):
+                st.markdown(f"**小白要先懂：{MASTERS[key]['simple_answer']}**")
+                st.caption("量化检查：" + " / ".join(MASTERS[key]["checks"]))
                 st.markdown(outputs[key])
 
         extra_views = {}
@@ -272,6 +272,10 @@ if page == "决策分析":
 
         with st.spinner("后台圆桌正在交叉质询，前台只展示蒸馏后的分歧雷达…"):
             debate_text = run_debate(outputs, stock)
+
+        with st.expander("三回合大师圆桌交锋", expanded=False):
+            st.caption("这里不是给用户看热闹，而是把分歧逼成可验证前提。")
+            st.markdown(debate_text)
 
         st.subheader("分歧雷达 + 可验证检查点")
         r1, r2, r3 = st.columns(3)
@@ -286,9 +290,9 @@ if page == "决策分析":
             st.caption("价格是否已经证明可以买，还是应该等确认？")
         st.markdown(
             """
-            - 如果毛利率和份额同步下滑，商业质量框架降权。
-            - 如果收入增速与产品/用户数据转弱，成长框架降权。
-            - 如果价格重新站回关键位，趋势框架的谨慎可以降权。
+            - 如果毛利率和份额同步下滑，巴菲特视角降权。
+            - 如果收入增速与产品/用户数据转弱，林奇视角降权。
+            - 如果价格重新站回关键位，利弗莫尔的谨慎可以降权。
             """
         )
 
