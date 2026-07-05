@@ -1,7 +1,7 @@
 """
 数据层 v3：港美股 + 新闻（Evidence Layer 的行情/新闻证据源）
 =============================================================
-- 优先尝试 yfinance 拉真实港美股数据（Codespace/本地联网时自动生效）
+- 默认优先尝试 yfinance 拉真实港美股数据
 - 失败自动降级到内置模拟数据（离线演示兜底）
 - 支持任意代码输入：美股字母（AAPL），港股数字+.HK（0700.HK）
 """
@@ -82,8 +82,18 @@ class DataProvider:
         return {c: v[0] for c, v in _MOCK.items()}
 
     def _real_data_enabled(self) -> bool:
-        """比赛演示默认走稳定离线数据；显式开启后才尝试 yfinance。"""
-        return os.getenv("ENABLE_REAL_DATA", "").lower() in {"1", "true", "yes"}
+        """默认尝试真实行情；如需强制演示数据，设置 ENABLE_REAL_DATA=0。"""
+        value = os.getenv("ENABLE_REAL_DATA", "")
+        try:
+            import streamlit as st
+            if "ENABLE_REAL_DATA" in st.secrets:
+                value = str(st.secrets["ENABLE_REAL_DATA"])
+        except Exception:
+            pass
+        return value.lower() not in {"0", "false", "no", "off"}
+
+    def status_label(self) -> str:
+        return "实时优先" if self._real_data_enabled() else "离线演示"
 
     # ---------- 真实数据（yfinance） ----------
     def _try_yfinance(self, code: str) -> Optional[StockInfo]:

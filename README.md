@@ -32,7 +32,7 @@ UI (Streamlit)
 ```
 **大模型只是推理和表达引擎；产品核心是持仓账本计算、证据时间线、框架卡约束、后台质询蒸馏与用户长期记忆。**
 数据层与 LLM 层均为抽象接口，替换官方 SDK 各只需改 1 个文件。
-为保证比赛现场稳定，默认使用内置港美股演示数据；如需启用 yfinance 真实行情，设置 `ENABLE_REAL_DATA=1`。
+默认优先尝试 yfinance 实时行情；如果网络或数据源失败，会自动切换到内置港美股演示数据。
 
 ## 商业模式
 C 端：免费限次 → 订阅解锁。长期价值来自**用户决策档案**：一年后用户能看到
@@ -43,14 +43,28 @@ B 端：向券商输出投教工具模块（券商有投资者教育合规义务
 ## 部署运行
 ```bash
 pip install -r requirements.txt
-# 可选：启用真实 yfinance 行情（不设置则使用稳定离线演示数据）
-export ENABLE_REAL_DATA=1
 # 可选：配置真实 LLM API（不配则进入离线演示模式）
-export LLM_API_BASE="https://api.xxx.com/v1"
+export LLM_API_BASE="https://ark.cn-beijing.volces.com/api/v3"
 export LLM_API_KEY="sk-xxx"
-export LLM_MODEL="模型名"
+export LLM_MODEL="doubao-seed-2-1-turbo"
 streamlit run app.py
 ```
+
+## 公共部署与密钥安全
+不要把 `ark_key.txt` 上传到 GitHub。公共部署建议使用 Streamlit Community Cloud：
+
+1. 连接 GitHub 仓库
+2. Main file path 填 `app.py`
+3. 在 App settings → Secrets 填：
+
+```toml
+LLM_API_KEY = "你的火山方舟 API Key"
+LLM_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+LLM_MODEL = "doubao-seed-2-1-turbo"
+ENABLE_REAL_DATA = "1"
+```
+
+如果实时行情不稳定，可以把 `ENABLE_REAL_DATA` 改成 `"0"`，系统会固定使用演示数据。
 
 ## 第三方资源声明
 - [Streamlit](https://streamlit.io/)（Apache-2.0）、[openai-python](https://github.com/openai/openai-python)（Apache-2.0）

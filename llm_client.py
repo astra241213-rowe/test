@@ -1,25 +1,36 @@
 """
 LLM 调用层（OpenAI 兼容，火山方舟可直连）
-密钥读取顺序：环境变量 LLM_API_KEY → 本地文件 ark_key.txt（重启不丢）
+密钥读取顺序：Streamlit Secrets → 环境变量 LLM_API_KEY → 本地文件 ark_key.txt
 没有密钥时自动进入 DEMO 模式（离线兜底，保证评审可演示）
 """
 
 import os
 
-API_BASE = os.getenv("LLM_API_BASE", "https://ark.cn-beijing.volces.com/api/v3")
-MODEL = os.getenv("LLM_MODEL", "doubao-seed-2-1-turbo-260628")
+DEFAULT_API_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+DEFAULT_MODEL = "doubao-seed-2-1-turbo"
+
+
+def _secret(name: str, default: str = "") -> str:
+    try:
+        import streamlit as st
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+    return default
+
+
+API_BASE = _secret("LLM_API_BASE", os.getenv("LLM_API_BASE", DEFAULT_API_BASE))
+MODEL = _secret("LLM_MODEL", os.getenv("LLM_MODEL", DEFAULT_MODEL))
 
 
 def _load_key() -> str:
+    key = _secret("LLM_API_KEY", "")
+    if key:
+        return key
     key = os.getenv("LLM_API_KEY", "")
     if key:
         return key
-    try:  # Streamlit Cloud 部署时从 Secrets 读取
-        import streamlit as st
-        if "LLM_API_KEY" in st.secrets:
-            return st.secrets["LLM_API_KEY"]
-    except Exception:
-        pass
     try:
         with open("ark_key.txt") as f:
             return f.read().strip()
@@ -28,6 +39,15 @@ def _load_key() -> str:
 
 
 API_KEY = _load_key()
+
+
+def status() -> dict:
+    return {
+        "connected": bool(API_KEY),
+        "model": MODEL,
+        "api_base": API_BASE,
+        "label": "已连接" if API_KEY else "DEMO 模式",
+    }
 
 
 def chat(system_prompt: str, user_prompt: str, temperature: float = 0.7) -> str:

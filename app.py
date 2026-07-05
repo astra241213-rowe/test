@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 import memory
+import llm_client
 from analyzer import analyze_sentiment, analyze_with_master, run_debate, synthesize
 from data_provider import provider
 from masters import DISCLAIMER, MASTERS
@@ -37,15 +38,16 @@ h1 { font-weight:700; border-bottom:1px solid #294348; padding-bottom:.35em; }
 .stTabs [aria-selected="true"] { color:#F2D38A !important; border-bottom-color:#1CB7A6 !important; }
 div[data-testid="stAlert"] { border-radius:8px; }
 hr { border-color:#294348; }
-.framework-card { border:1px solid #26464B; background:#10191E; border-radius:8px; padding:14px; min-height:170px; }
-.framework-step { color:#1CB7A6; font-weight:800; font-size:13px; }
+.step-strip { display:flex; gap:8px; flex-wrap:wrap; margin:.5rem 0 1rem 0; }
+.step-chip { border:1px solid #26464B; background:#10191E; border-radius:999px; padding:8px 12px; color:#E8ECE8; font-size:14px; }
+.step-chip b { color:#1CB7A6; }
 .timeline-item { border-left:3px solid #1CB7A6; padding:2px 0 12px 12px; margin-left:6px; }
 .timeline-date { color:#F2D38A; font-weight:700; }
 .soft-box { border:1px solid #26464B; background:#0F1A1D; border-radius:8px; padding:14px; }
 </style>""", unsafe_allow_html=True)
 
 st.title("大师圆桌 · 个人投资决策智能")
-st.caption("先算清你的持仓账本，再用五个小白问题看懂：股票是什么、公司好不好、贵不贵、时机对不对、适不适合现在的你。")
+st.caption("先算账，再判断：股票是什么 → 公司好不好 → 价格贵不贵 → 时机对不对 → 适不适合现在的你。")
 
 
 def money(value, currency=""):
@@ -96,28 +98,15 @@ def build_timeline(stock, portfolio, news_list):
 
 
 def render_framework_cards():
-    st.subheader("小白五问学习路径")
-    st.caption("大师不是用来表演人格，而是把新手看股票的顺序变清楚。")
-    cols = st.columns(4)
-    for col, key in zip(cols, ["lynch", "buffett", "graham", "livermore"]):
-        m = MASTERS[key]
-        with col:
-            st.markdown(
-                f"""
-                <div class="framework-card">
-                  <div class="framework-step">第 {m['emoji']} 问</div>
-                  <h4>{m['beginner_question']}</h4>
-                  <p>{m['simple_answer']}</p>
-                  <p><b>检查：</b>{' / '.join(m['checks'])}</p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    st.subheader("小白四步")
     st.markdown(
         """
-        <div class="soft-box">
-        <b>第 5 问：适不适合现在的我？</b><br>
-        这一问由裁判 Agent 回答：结合你的投入本金、成本价、可用现金、最多能亏多少钱和投资期限，判断现在该等、减仓、观察还是小额试错。
+        <div class="step-strip">
+          <span class="step-chip"><b>1</b> 股票是什么</span>
+          <span class="step-chip"><b>2</b> 公司好不好</span>
+          <span class="step-chip"><b>3</b> 价格贵不贵</span>
+          <span class="step-chip"><b>4</b> 时机对不对</span>
+          <span class="step-chip"><b>5</b> 适不适合我</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -125,6 +114,9 @@ def render_framework_cards():
 
 
 page = st.sidebar.radio("导航", ["决策分析", "决策档案与复盘"])
+model_status = llm_client.status()
+st.sidebar.caption(f"模型：{model_status['label']} · {model_status['model']}")
+st.sidebar.caption(f"数据：{provider.status_label()}，失败自动切换演示数据")
 
 if page == "决策分析":
     with st.sidebar:
@@ -295,14 +287,7 @@ if page == "决策分析":
         st.success("本次分析已存入决策档案。")
         st.info(DISCLAIMER)
     else:
-        st.markdown(
-            """
-            <div class="soft-box">
-            <b>使用流程：</b>填写真实持仓账本 → 选择股票 → 系统先算账 → 四张框架卡检查股票 → 后台圆桌质询 → 裁判给出适合你的结论。
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.caption("填写左侧持仓账本，选择股票后开始分析。")
         st.info(DISCLAIMER)
 
 else:
